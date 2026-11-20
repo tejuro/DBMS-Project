@@ -1,0 +1,193 @@
+/// Prisma Schema — Smart Cold-Chain Logistics Monitoring System
+/// MySQL 8+ compatible — relational business records
+/// MongoDB handles telemetry/monitoring data via direct driver
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// Core relational models
+
+/// ROLE — system roles (ADMIN, DISPATCHER, CUSTOMER)
+model ROLE {
+  role_id   Int       @default(1) @id
+  role_name String    @unique
+  is_active Boolean   @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  users User[]
+
+  @@ map("role")
+}
+
+/// USER — application users with login accounts
+model USER {
+  user_id   Int       @default(1) @id
+  role_id   Int
+  username  String    @unique
+  email     String    @unique
+  password_hash String
+  is_active Boolean   @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  customer   Customer?
+  driver     Driver?
+  role       ROLE    @relation(fields: [role_id], references: [role_id])
+
+  @@ map("user")
+}
+
+/// CUSTOMER — customer profiles
+model CUSTOMER {
+  customer_id Int       @default(1) @id
+  user_id     Int       @unique
+  name        String
+  company_name String
+  address     String?
+  phone       String?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  user      USER    @relation(fields: [user_id], references: [user_id])
+  shipments SHIPMENT[]
+
+  @@ map("customer")
+}
+
+/// DRIVER — driver profiles
+model DRIVER {
+  driver_id   Int       @default(1) @id
+  user_id     Int       @unique
+  name        String
+  license_no  String    @unique
+  phone       String
+  status      String    @default("AVAILABLE")
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  user      USER    @relation(fields: [user_id], references: [user_id])
+  assigned_shipments SHIPMENT[]
+
+  @@ map("driver")
+}
+
+/// VEHICLE — vehicle profiles
+model VEHICLE {
+  vehicle_id   Int       @default(1) @id
+  reg_no       String    @unique
+  vehicle_type String
+  capacity_kg  Float
+  status       String   @default("AVAILABLE")
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  assigned_shipments SHIPMENT[]
+
+  @@ map("vehicle")
+}
+
+/// WAREHOUSE — warehouse/storage facility profiles
+model WAREHOUSE {
+  warehouse_id   Int       @default(1) @id
+  name           String
+  address        String
+  city           String
+  latitude       Float
+  longitude      Float
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  routes        Route[]
+
+  @@ map("warehouse")
+}
+
+/// ROUTE — defined routes between warehouses
+model ROUTE {
+  route_id        Int       @default(1) @id
+  origin_warehouse_id Int
+  destination_warehouse_id Int
+  distance_km     Float
+  estimated_duration_minutes Float
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  origin_warehouse  WAREHOUSE @relation(fields: [origin_warehouse_id], references: [warehouse_id], reference: [warehouse_id])
+  destination_warehouse WAREHOUSE @relation(fields: [destination_warehouse_id], references: [warehouse_id], reference: [warehouse_id])
+  shipments       SHIPMENT[]
+
+  @@ map("route")
+}
+
+/// PRODUCT — product definitions with environmental thresholds
+model PRODUCT {
+  product_id   Int       @default(1) @id
+  name         String
+  category     String
+  min_temp_c   Float
+  max_temp_c   Float
+  min_humidity Float
+  max_humidity Float
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  shipment_items SHIPMENT_ITEM[]
+
+  @@ map("product")
+}
+
+/// SHIPMENT — core shipment entity
+model SHIPMENT {
+  shipment_id  Int       @default(1) @id
+  customer_id  Int
+  created_by   Int
+  route_id     Int?
+  vehicle_id   Int?
+  driver_id    Int?
+  status       String
+  risk_status  String
+  dispatched_at DateTime?
+  expected_delivery DateTime?
+  delivered_at DateTime?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  customer     CUSTOMER   @relation(fields: [customer_id], references: [customer_id])
+  creator      USER       @relation(fields: [created_by], references: [user_id])
+  route        ROUTE?     @relation(fields: [route_id], references: [route_id])
+  vehicle      VEHICLE?   @relation(fields: [vehicle_id], references: [vehicle_id])
+  driver       DRIVER?    @relation(fields: [driver_id], references: [driver_id])
+  shipment_items SHIPMENT_ITEM[]
+
+  @@ map("shipment")
+}
+
+/// SHIPMENT_ITEM — products within a shipment
+model SHIPMENT_ITEM {
+  shipment_id  Int
+  product_id   Int
+  quantity     Int       @default(1)
+
+  shipment     SHIPMENT   @relation(fields: [shipment_id], references: [shipment_id])
+  product      PRODUCT    @relation(fields: [product_id], references: [product_id])
+
+  @@ id([shipment_id, product_id])
+  @@ map("shipment_item")
+}
+
+/// SHIPMENT_STATUS_HISTORY — audit trail of status changes
+model SHIPMENT_STATUS_HISTORY {
+  history_id   Int       @default(1) @id @autoinc
+  shipment_id  Int
+  changed_by   Int?
+  old_status   String
+  new_status   String
+  changed_at   DateTime  @default(now())
+  remarks      String?
+
+  shipment     SHIPMENT   @relation(fields: [shipment_id], references: [shipment_id])
+
+  @@ map("shipment_status_history")
+}
